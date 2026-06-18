@@ -65,6 +65,10 @@ public abstract class CpuImageProcessor extends FrameProvider {
     public final Frame get() {
         var input = getInputMat();
 
+        if (input == null) {
+            return new Frame();
+        }
+
         m_rImagePipe.run(input.colorImage.getMat());
 
         CVMat outputMat = null;

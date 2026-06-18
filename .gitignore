@@ -23,6 +23,7 @@ _build
 
 # Package Files #
 *.jar
+!photon-core/libs/MvCameraControlWrapper.jar
 *.war
 *.nar
 *.ear
@@ -161,3 +162,6 @@ photon-client/playwright/.auth/
 shell.nix
 flake.nix
 flake.lock
+
+temp/
+photon-client/pnpm-workspace.yaml

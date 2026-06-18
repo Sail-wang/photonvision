@@ -33,7 +33,8 @@ import java.util.Objects;
 @JsonSubTypes({
     @JsonSubTypes.Type(value = PVCameraInfo.PVUsbCameraInfo.class),
     @JsonSubTypes.Type(value = PVCameraInfo.PVCSICameraInfo.class),
-    @JsonSubTypes.Type(value = PVCameraInfo.PVFileCameraInfo.class)
+    @JsonSubTypes.Type(value = PVCameraInfo.PVFileCameraInfo.class),
+    @JsonSubTypes.Type(value = PVCameraInfo.PVHikvisionCameraInfo.class)
 })
 public sealed interface PVCameraInfo {
     /**
@@ -297,7 +298,78 @@ public sealed interface PVCameraInfo {
         return new PVCSICameraInfo(path, baseName);
     }
 
+    @JsonTypeName("PVHikvisionCameraInfo")
+    public static final class PVHikvisionCameraInfo implements PVCameraInfo {
+        public final String serialNumber;
+        public final String userDefinedName;
+        public final String modelName;
+
+        @JsonCreator
+        public PVHikvisionCameraInfo(
+                @JsonProperty("serialNumber") String serialNumber,
+                @JsonProperty("userDefinedName") String userDefinedName,
+                @JsonProperty("modelName") String modelName) {
+            this.serialNumber = serialNumber;
+            this.userDefinedName = userDefinedName;
+            this.modelName = modelName;
+        }
+
+        @Override
+        public String path() {
+            return serialNumber;
+        }
+
+        @Override
+        public String name() {
+            return userDefinedName != null && !userDefinedName.isEmpty() ? userDefinedName : modelName;
+        }
+
+        @Override
+        public String uniquePath() {
+            return serialNumber;
+        }
+
+        @Override
+        public String[] otherPaths() {
+            return new String[0];
+        }
+
+        @Override
+        public CameraType type() {
+            return CameraType.HikvisionCamera;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (obj == null) return false;
+            if (!(obj instanceof PVHikvisionCameraInfo info)) return false;
+            return serialNumber.equals(info.serialNumber);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(serialNumber);
+        }
+
+        @Override
+        public String toString() {
+            return "PVHikvisionCameraInfo[type="
+                    + type()
+                    + ", serial="
+                    + serialNumber
+                    + ", name='"
+                    + userDefinedName
+                    + "']";
+        }
+    }
+
     public static PVCameraInfo fromFileInfo(String path, String baseName) {
         return new PVFileCameraInfo(path, baseName);
+    }
+
+    public static PVCameraInfo fromHikvisionCameraInfo(
+            String serialNumber, String userDefinedName, String modelName) {
+        return new PVHikvisionCameraInfo(serialNumber, userDefinedName, modelName);
     }
 }

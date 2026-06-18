@@ -44,7 +44,9 @@ import org.photonvision.common.util.TimedTaskManager;
 import org.photonvision.raspi.LibCameraJNI;
 import org.photonvision.vision.camera.CameraType;
 import org.photonvision.vision.camera.FileVisionSource;
+import org.photonvision.vision.camera.HikvisionCamera.HikvisionVisionSource;
 import org.photonvision.vision.camera.PVCameraInfo;
+import org.photonvision.vision.camera.PVCameraInfo.PVHikvisionCameraInfo;
 import org.photonvision.vision.camera.USBCameras.USBCameraSource;
 import org.photonvision.vision.camera.csi.LibcameraGpuSource;
 
@@ -320,9 +322,90 @@ public class VisionSourceManager {
                 .filter(info -> info instanceof PVCameraInfo.PVFileCameraInfo)
                 .forEach(cameraInfos::add);
 
+        // Hikvision cameras: enumerate via MVS SDK if available
+        try {
+            // logger.debug("Attempting Hikvision camera enumeration via MVS SDK...");
+            var hikCameras = getConnectedHikvisionCameras();
+            // logger.debug("Hikvision enumeration found " + hikCameras.size() + " camera(s)");
+            cameraInfos.addAll(hikCameras);
+        } catch (NoClassDefFoundError e) {
+            logger.debug("Hikvision SDK not on classpath, skipping Hikvision camera enumeration");
+        } catch (UnsatisfiedLinkError e) {
+            logger.debug("Hikvision native library not available on this platform, skipping enumeration");
+        } catch (Exception e) {
+            logger.error("Error enumerating Hikvision cameras: " + e.getMessage(), e);
+        }
+
         checkMismatches(cameraInfos);
 
         return cameraInfos;
+    }
+
+    /**
+     * Enumerate connected Hikvision USB cameras via MVS SDK. SDK is initialized lazily on first call
+     * and kept alive for subsequent enumerations.
+     */
+    private List<PVCameraInfo> getConnectedHikvisionCameras() {
+        List<PVCameraInfo> cameras = new ArrayList<>();
+        try {
+            // Lazy-init SDK once — do NOT finalize after each enumeration
+            ensureHikvisionSdkInitialized();
+
+            // logger.debug("Enumerating Hikvision USB devices...");
+            var deviceList =
+                    MvCameraControlWrapper.MvCameraControl.MV_CC_EnumDevices(
+                            MvCameraControlWrapper.MvCameraControlDefines.MV_USB_DEVICE
+                                    | MvCameraControlWrapper.MvCameraControlDefines.MV_VIR_USB_DEVICE);
+
+            // logger.debug("MVS EnumDevices returned " + deviceList.size() + " device(s)");
+
+            for (var device : deviceList) {
+                // logger.debug("MVS device: TL=" + device.transportLayerType
+                //         + " name=" + device.usb3VInfo.userDefinedName
+                //         + " sn=" + device.usb3VInfo.serialNumber
+                //         + " model=" + device.usb3VInfo.modelName);
+                // Accept any transport layer type (USB, GigE, etc.)
+                // Bitwise check — device may be USB only or USB+Virtual
+                if ((device.transportLayerType
+                                & (MvCameraControlWrapper.MvCameraControlDefines.MV_USB_DEVICE
+                                        | MvCameraControlWrapper.MvCameraControlDefines.MV_VIR_USB_DEVICE))
+                        != 0) {
+                    String sn = device.usb3VInfo.serialNumber != null ? device.usb3VInfo.serialNumber : "";
+                    String name =
+                            device.usb3VInfo.userDefinedName != null
+                                    ? device.usb3VInfo.userDefinedName
+                                    : "Hikvision Camera";
+                    String model = device.usb3VInfo.modelName != null ? device.usb3VInfo.modelName : "";
+
+                    cameras.add(PVCameraInfo.fromHikvisionCameraInfo(sn, name, model));
+                    // logger.debug("Added Hikvision camera: " + name + " (SN: " + sn + ")");
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error during Hikvision camera enumeration", e);
+        }
+        return cameras;
+    }
+
+    private boolean hikvisionSdkInitialized = false;
+
+    /** Ensure the Hikvision MVS SDK is initialized (called once, lazily). */
+    private synchronized void ensureHikvisionSdkInitialized() {
+        if (hikvisionSdkInitialized) return;
+        try {
+            try {
+                logger.info("Calling MV_CC_Initialize()...");
+                int ret = MvCameraControlWrapper.MvCameraControl.MV_CC_Initialize();
+                logger.info("MV_CC_Initialize() returned: 0x" + Integer.toHexString(ret));
+            } catch (UnsatisfiedLinkError e) {
+                logger.info(
+                        "MV_CC_Initialize threw UnsatisfiedLinkError — assuming implicit init (macOS?)");
+            }
+            hikvisionSdkInitialized = true;
+            logger.info("Hikvision SDK initialized successfully");
+        } catch (Exception e) {
+            logger.error("Failed to init Hikvision SDK", e);
+        }
     }
 
     /**
@@ -504,6 +587,20 @@ public class VisionSourceManager {
                     case UsbCamera -> new USBCameraSource(configuration);
                     case ZeroCopyPicam -> new LibcameraGpuSource(configuration);
                     case FileCamera -> new FileVisionSource(configuration);
+                    case HikvisionCamera -> {
+                        var hikSource = new HikvisionVisionSource(configuration);
+                        // Initialize SDK + open camera + start grabbing
+                        if (configuration.matchedCameraInfo instanceof PVHikvisionCameraInfo hikInfo) {
+                            if (hikSource.initialize()
+                                    && hikSource.openCamera(hikInfo.serialNumber)
+                                    && hikSource.startGrabbing()) {
+                                logger.info("Hikvision camera started: " + configuration.nickname);
+                            } else {
+                                logger.error("Failed to start Hikvision camera: " + configuration.nickname);
+                            }
+                        }
+                        yield hikSource;
+                    }
                 };
 
         if (source.getFrameProvider() == null) {

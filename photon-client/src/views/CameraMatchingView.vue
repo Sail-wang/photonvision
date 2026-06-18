@@ -7,6 +7,7 @@ import {
   PVCameraInfo,
   type PVCSICameraInfo,
   type PVFileCameraInfo,
+  type PVHikvisionCameraInfo,
   type PVUsbCameraInfo
 } from "@/types/SettingTypes";
 import { axiosPost, getResolutionString } from "@/lib/PhotonUtils";
@@ -108,7 +109,9 @@ const setCameraView = (camera: PVCameraInfo | null, isConnected: boolean | null)
 /**
  * Get the connection-type-specific camera info from the given PVCameraInfo object.
  */
-const cameraInfoFor = (camera: PVCameraInfo | null): PVUsbCameraInfo | PVCSICameraInfo | PVFileCameraInfo | any => {
+const cameraInfoFor = (
+  camera: PVCameraInfo | null
+): PVUsbCameraInfo | PVCSICameraInfo | PVFileCameraInfo | PVHikvisionCameraInfo | any => {
   if (!camera) return null;
   if (camera.PVUsbCameraInfo) {
     return camera.PVUsbCameraInfo;
@@ -118,6 +121,9 @@ const cameraInfoFor = (camera: PVCameraInfo | null): PVUsbCameraInfo | PVCSICame
   }
   if (camera.PVFileCameraInfo) {
     return camera.PVFileCameraInfo;
+  }
+  if (camera.PVHikvisionCameraInfo) {
+    return camera.PVHikvisionCameraInfo;
   }
   return {};
 };
@@ -130,7 +136,8 @@ const getMatchedDevice = (info: PVCameraInfo | undefined): PVCameraInfo => {
     return {
       PVFileCameraInfo: undefined,
       PVCSICameraInfo: undefined,
-      PVUsbCameraInfo: undefined
+      PVUsbCameraInfo: undefined,
+      PVHikvisionCameraInfo: undefined
     };
   }
   return (
@@ -139,7 +146,8 @@ const getMatchedDevice = (info: PVCameraInfo | undefined): PVCameraInfo => {
     ) || {
       PVFileCameraInfo: undefined,
       PVCSICameraInfo: undefined,
-      PVUsbCameraInfo: undefined
+      PVUsbCameraInfo: undefined,
+      PVHikvisionCameraInfo: undefined
     }
   );
 };
@@ -158,7 +166,9 @@ const getMatchedDevice = (info: PVCameraInfo | undefined): PVCameraInfo => {
         class="pr-0"
       >
         <v-card color="surface" class="rounded-12">
-          <v-card-title>{{ cameraInfoFor(module.matchedCameraInfo).name }}</v-card-title>
+          <v-card-title>{{
+            cameraInfoFor(module.matchedCameraInfo).name ?? cameraInfoFor(module.matchedCameraInfo).userDefinedName
+          }}</v-card-title>
           <v-card-subtitle v-if="!cameraConnected(cameraInfoFor(module.matchedCameraInfo).uniquePath)"
             >Status: <span class="inactive-status">Disconnected</span></v-card-subtitle
           >
@@ -380,12 +390,22 @@ const getMatchedDevice = (info: PVCameraInfo | undefined): PVCameraInfo => {
             <span v-if="camera.PVUsbCameraInfo">USB Camera:</span>
             <span v-else-if="camera.PVCSICameraInfo">CSI Camera:</span>
             <span v-else-if="camera.PVFileCameraInfo">File Camera:</span>
+            <span v-else-if="camera.PVHikvisionCameraInfo">Hikvision Camera:</span>
             <span v-else>Unknown Camera:</span>
-            &nbsp;<span>{{ cameraInfoFor(camera)?.name ?? cameraInfoFor(camera)?.baseName }}</span>
+            &nbsp;<span>{{
+              cameraInfoFor(camera)?.name ??
+              cameraInfoFor(camera)?.baseName ??
+              cameraInfoFor(camera)?.userDefinedName ??
+              cameraInfoFor(camera)?.modelName
+            }}</span>
           </v-card-title>
           <v-card-subtitle>Status: Unassigned</v-card-subtitle>
           <v-card-text class="pt-3">
-            <span style="word-break: break-all">{{ cameraInfoFor(camera)?.path }}</span>
+            <span style="word-break: break-all">{{
+              cameraInfoFor(camera)?.otherPaths?.[0] ??
+              cameraInfoFor(camera)?.path ??
+              cameraInfoFor(camera)?.serialNumber
+            }}</span>
           </v-card-text>
           <v-card-text class="pt-0">
             <v-row>

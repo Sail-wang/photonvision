@@ -58,6 +58,10 @@ dependencies {
 
     implementation "org.photonvision:photon-libcamera-gl-driver-java:$libcameraDriverVersion"
 
+    // Hikvision MVS SDK wrapper JAR — platform-independent Java wrapper
+    // Native libraries (MvCameraControl.dll/.so) must be on java.library.path at runtime
+    implementation fileTree(dir: 'libs', include: '*.jar')
+
     implementation "org.photonvision:photon-mrcal-java:$mrcalVersion"
 
     wpilibNatives("org.photonvision:photon-mrcal-jni:$mrcalVersion:$jniPlatform") {
