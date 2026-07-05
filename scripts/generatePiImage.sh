@@ -48,6 +48,8 @@ sudo bash -c "printf \
 Description=Service that runs PhotonVision
 
 [Service]
+Environment=LD_LIBRARY_PATH=/opt/MVS/lib/aarch64
+
 WorkingDirectory=/opt/photonvision
 ExecStart=/usr/bin/java -Xmx512m -jar /opt/photonvision/photonvision.jar
 ExecStop=/bin/systemctl kill photonvision
