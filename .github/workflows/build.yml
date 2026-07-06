@@ -579,7 +579,7 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: jar-${{ matrix.artifact-name }}
-      - uses: photonvision/photon-image-runner@v2.0.0
+      - uses: photonvision/photon-image-runner@HEAD
         name: Generate image
         id: generate_image
         with:
@@ -621,7 +621,7 @@ jobs:
           path: photonvision*.xz
 
         # This is done after uploading the image to avoid contaminating the image with logs, caches, etc.
-      - uses: photonvision/photon-image-runner@v2.0.0
+      - uses: photonvision/photon-image-runner@HEAD
         name: Smoketest Image
         with:
           image_url: file://${{ env.smoketest_image_loc }}

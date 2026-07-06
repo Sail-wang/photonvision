@@ -18,6 +18,8 @@ if [ -d "$HIK_NATIVE_DIR" ]; then
     sudo cat "$HIK_NATIVE_DIR"/MVS-5.0.1_aarch64_20260512.deb.* > "$HIK_NATIVE_DIR"/MVS-5.0.1_aarch64_20260512.deb
     sudo apt-get install -y "$HIK_NATIVE_DIR"/MVS-5.0.1_aarch64_20260512.deb
     sudo rm "$HIK_NATIVE_DIR"/MVS-5.0.1_aarch64_20260512.deb*
+    # Kill any MVS background processes that hold /dev references (e.g. logserver)
+    sudo pkill -f '/opt/MVS/' 2>/dev/null || true
 else
     echo "Hikvision native library directory not found, skipping ($HIK_NATIVE_DIR)"
 fi
