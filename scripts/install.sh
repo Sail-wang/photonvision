@@ -77,6 +77,9 @@ Syntax: sudo ./install.sh [options]
       NetworkManager if needed. This will only work on Debian-based Linux systems.
       Options: "yes", "no".
       Default: "yes" (unless -q or --quiet is specified, then "no").
+  -j <path>, --jar=<path>
+      Specifies a local JAR file to install instead of downloading.
+      If not specified, the JAR will be downloaded from GitHub releases.
   -q, --quiet
       Silent install, automatically accepts all defaults. For
       non-interactive use. Makes -c, --control-networking default to "no".
@@ -95,6 +98,7 @@ fi
 
 CONTROL_NETWORKING="ask"
 PV_VERSION="latest"
+JAR_FILE=""
 
 # use GITHUB TOKEN when available to authenticate
 AUTH_TOKEN=""
@@ -102,7 +106,7 @@ if [[ -n $GH_TOKEN ]]; then
   AUTH_TOKEN="Authorization: Bearer $GH_TOKEN"
 fi
 
-while getopts "hlva:cqt-:" OPT; do
+while getopts "hlva:cqtj:-:" OPT; do
   RAWOPT="$OPT"
   if [ "$OPT" = "-" ]; then
     RAWOPT="-$OPTARG"
@@ -153,6 +157,9 @@ while getopts "hlva:cqt-:" OPT; do
         die "--control-networking=$CONTROL_NETWORKING was already set. The option '-$RAWOPT' is redundant."
       fi
     ;;
+    j | jar) needs_arg;
+      JAR_FILE="$OPTARG"
+      ;;
     q | quiet)
       QUIET="QUIET-"
       ;;
@@ -253,20 +260,27 @@ else
   USER_CONTROL="yes"
 fi
 
-# select the right version of the PhotonVision release URL
-if [ "$PV_VERSION" = "latest" ] ; then
-  RELEASE_URL="https://api.github.com/repos/photonvision/photonvision/releases/latest"
+if [[ -n $JAR_FILE ]]; then
+  if [[ ! -f $JAR_FILE ]]; then
+    die "JAR file not found: '$JAR_FILE'"
+  fi
+  debug "Using local JAR file: '$JAR_FILE'"
 else
-  RELEASE_URL="https://api.github.com/repos/photonvision/photonvision/releases/tags/$PV_VERSION"
-fi
+  # select the right version of the PhotonVision release URL
+  if [ "$PV_VERSION" = "latest" ] ; then
+    RELEASE_URL="https://api.github.com/repos/photonvision/photonvision/releases/latest"
+  else
+    RELEASE_URL="https://api.github.com/repos/photonvision/photonvision/releases/tags/$PV_VERSION"
+  fi
 
-DOWNLOAD_URL=$(wget -q --header="$AUTH_TOKEN" -O - "$RELEASE_URL" |
+  DOWNLOAD_URL=$(wget -q --header="$AUTH_TOKEN" -O - "$RELEASE_URL" |
                   grep -oP -m 1 "browser_download_url.*\Khttp.*(${ARCH_NAME})\.jar"
               )
 
-if [[ -z $DOWNLOAD_URL ]] ; then
-  die "PhotonVision '$PV_VERSION' is not available for $ARCH_NAME!" \
-      "Use ./install --list-versions to get a list of available versions."
+  if [[ -z $DOWNLOAD_URL ]] ; then
+    die "PhotonVision '$PV_VERSION' is not available for $ARCH_NAME!" \
+        "Use ./install --list-versions to get a list of available versions."
+  fi
 fi
 
 debug "Updating package list..."
@@ -323,9 +337,14 @@ debug "" "Downloading PhotonVision '$PV_VERSION' from '$DOWNLOAD_URL'..."
 if [[ -z $TEST ]]; then
   mkdir -p /opt/photonvision
   cd /opt/photonvision || die "Tried to enter /opt/photonvision, but it was not created."
-  wget -q --header="$AUTH_TOKEN" -O photonvision.jar "$DOWNLOAD_URL"
+  if [[ -n $JAR_FILE ]]; then
+    cp "$JAR_FILE" photonvision.jar
+    debug "Copied local JAR to /opt/photonvision/photonvision.jar"
+  else
+    wget -q --header="$AUTH_TOKEN" -O photonvision.jar "$DOWNLOAD_URL"
+    debug "Downloaded PhotonVision."
+  fi
 fi
-debug "Downloaded PhotonVision."
 
 CPUs="# AllowedCPUs=4-7"
 if grep -q "RK3588" /proc/cpuinfo; then
@@ -343,7 +362,7 @@ Description=Service that runs PhotonVision
 ${USER_CONTROL:+# }After=network.target
 
 [Service]
-Environment=LD_LIBRARY_PATH=/opt/MVS/lib/aarch64
+Environment=LD_LIBRARY_PATH=/opt/MVS/lib/64
 
 WorkingDirectory=/opt/photonvision
 # Run photonvision at "nice" -10, which is higher priority than standard
